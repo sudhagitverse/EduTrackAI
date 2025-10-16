@@ -3,15 +3,19 @@ import { Link, useNavigate } from "react-router-dom";
 import API from "../api";
 
 export default function Dashboard() {
-  const [available, setAvailable] = useState([]); // started courses
-  const [upcoming, setUpcoming] = useState([]); // future courses
+  const [available, setAvailable] = useState([]);
+  const [upcoming, setUpcoming] = useState([]);
   const [enrolled, setEnrolled] = useState([]);
   const nav = useNavigate();
+  const token = localStorage.getItem("token");
 
   useEffect(() => {
-    fetchCourses();
-    if (localStorage.getItem("token")) fetchEnrolled();
-  }, []);
+    if (token) {
+      fetchEnrolled().then(() => fetchCourses());
+    } else {
+      fetchCourses();
+    }
+  }, [token]);
 
   async function fetchCourses() {
     try {
@@ -21,8 +25,10 @@ export default function Dashboard() {
       const upcomingCourses = res.data.filter(
         (c) => new Date(c.start_date) > today
       );
-
-      setAvailable(started);
+      const filteredStarted = started.filter(
+        (course) => !enrolled.some((e) => e.id === course.id)
+      );
+      setAvailable(filteredStarted);
       setUpcoming(upcomingCourses);
     } catch (e) {
       console.error(e);
@@ -33,296 +39,155 @@ export default function Dashboard() {
     try {
       const res = await API.get("/enrollments");
       setEnrolled(res.data);
+      return res.data;
     } catch (e) {
       console.error(e);
     }
   }
 
-  // 🟢 Enroll only if logged in
   async function enroll(courseId) {
-    const token = localStorage.getItem("token");
     if (!token) {
       alert("Please login to enroll in a course.");
       nav("/login");
       return;
     }
-
     try {
       await API.post("/enrollments", { course_id: courseId });
       alert("✅ Enrolled successfully!");
-      fetchEnrolled();
+      await fetchEnrolled();
+      fetchCourses();
     } catch (e) {
       console.error(e);
       alert(e?.response?.data?.message || "Error");
     }
   }
 
-  // 🔴 New: Unenroll function
   async function handleUnenroll(courseId) {
-    if (!window.confirm("Are you sure you want to unenroll from this course?")) return;
+    if (!window.confirm("Are you sure you want to unenroll from this course?"))
+      return;
     try {
       await API.delete(`/enrollments/${courseId}`);
       alert("❌ Unenrolled successfully!");
-      fetchEnrolled();
+      await fetchEnrolled();
+      fetchCourses();
     } catch (e) {
       console.error(e);
       alert("Error while unenrolling");
     }
   }
 
-  function isEnrolled(courseId) {
-    return enrolled.some((c) => c.id === courseId);
-  }
-
-  const token = localStorage.getItem("token");
-
   return (
     <div
       style={{
         padding: 20,
-        fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-        backgroundColor: "#f9fafb",
+        fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+        background: "linear-gradient(135deg, #f0f9ff 0%, #fffaf0 100%)",
         minHeight: "100vh",
       }}
     >
+      {/* 🌟 Premium Header */}
       <h1
         style={{
-          color: "#ff6f00",
-          fontSize: "2.5rem",
-          fontWeight: "bold",
-          marginBottom: 30,
+          color: "#1e40af", // Elegant deep blue instead of black
+          fontSize: "2.6rem",
+          fontWeight: "800",
+          marginBottom: 40,
           textAlign: "center",
+          letterSpacing: "0.5px",
+          textShadow: "0 1px 6px rgba(30,64,175,0.1)",
         }}
       >
-        EduTrack
+        EduTrack 📚
       </h1>
 
-      {/* 🟢 Enrolled Courses */}
       {token && (
-        <section style={{ marginBottom: 40 }}>
-          <h2 style={{ fontSize: "1.8rem", marginBottom: 15 }}>
-            Your Enrolled Courses
-          </h2>
+        <Section title="Your Enrolled Courses">
           {enrolled.length === 0 ? (
-            <p style={{ color: "#6b7280" }}>
-              You haven't enrolled in any course yet.
-            </p>
+            <EmptyState text="You haven't enrolled in any course yet." />
           ) : (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
-                gap: 20,
-              }}
-            >
+            <CourseGrid>
               {enrolled.map((c) => (
-                <div
+                <CourseCard
                   key={c.id}
-                  style={{
-                    padding: 16,
-                    borderRadius: 10,
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                    backgroundColor: "#fff",
-                  }}
-                >
-                  <h3 style={{ fontSize: "1.2rem", fontWeight: "bold" }}>
-                    <Link
-                      to={`/course/${c.id}`}
-                      style={{ textDecoration: "none", color: "#111827" }}
-                    >
-                      {c.title}
-                    </Link>
-                  </h3>
-                  <p
-                    style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}
-                  >
-                    {c.instructor}
-                  </p>
-                  <p
-                    style={{ marginTop: 5, fontSize: 13, color: "#4b5563" }}
-                  >
-                    {c.description?.slice(0, 120)}...
-                  </p>
-
-                  {/* ✅ Go to Course & Unenroll Buttons */}
-                  <div
-                    style={{
-                      marginTop: 10,
-                      display: "flex",
-                      gap: 10,
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <Link
-                      to={`/course/${c.id}`}
-                      style={{
-                        flex: 1,
-                        textAlign: "center",
-                        backgroundColor: "#10b981",
-                        color: "#fff",
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        textDecoration: "none",
-                      }}
-                    >
+                  title={c.title}
+                  instructor={c.instructor}
+                  description={c.description}
+                  primaryAction={
+                    <Link to={`/course/${c.id}`} style={styles.greenButton}>
                       Go to Course
                     </Link>
+                  }
+                  secondaryAction={
                     <button
                       onClick={() => handleUnenroll(c.id)}
-                      style={{
-                        flex: 1,
-                        backgroundColor: "#ef4444",
-                        color: "#fff",
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
+                      style={styles.redButton}
                     >
                       Unenroll
                     </button>
-                  </div>
-                </div>
+                  }
+                />
               ))}
-            </div>
+            </CourseGrid>
           )}
-        </section>
+        </Section>
       )}
 
-      {/* 🟢 All Available Courses */}
-      <section style={{ marginBottom: 40 }}>
-        <h2 style={{ fontSize: "1.8rem", marginBottom: 15 }}>
-          Available Courses
-        </h2>
+      <Section title="Available Courses">
         {available.length === 0 ? (
-          <p style={{ color: "#6b7280" }}>No courses have started yet.</p>
+          <EmptyState text="No courses have started yet." />
         ) : (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
-              gap: 20,
-            }}
-          >
+          <CourseGrid>
             {available.map((c) => (
-              <div
+              <CourseCard
                 key={c.id}
-                style={{
-                  padding: 16,
-                  borderRadius: 10,
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-                  backgroundColor: "#fff",
-                }}
-              >
-                <h3
-                  style={{
-                    fontSize: "1.2rem",
-                    fontWeight: "bold",
-                    color: "#111827",
-                  }}
-                >
-                  {c.title}
-                </h3>
-                <p
-                  style={{ fontSize: 13, fontWeight: 500, color: "#374151" }}
-                >
-                  {c.instructor}
-                </p>
-                <p
-                  style={{ marginTop: 5, fontSize: 13, color: "#4b5563" }}
-                >
-                  {c.description?.slice(0, 120)}...
-                </p>
-                <div style={{ marginTop: 10 }}>
-                  {isEnrolled(c.id) ? (
-                    <Link
-                      to={`/course/${c.id}`}
-                      style={{
-                        backgroundColor: "#10b981",
-                        color: "#fff",
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        textDecoration: "none",
-                      }}
-                    >
-                      Go to Course
-                    </Link>
-                  ) : token ? (
-                    <button
-                      onClick={() => enroll(c.id)}
-                      style={{
-                        backgroundColor: "#f97316",
-                        color: "#fff",
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Enroll
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        alert("Please login to view or enroll in courses.");
-                        nav("/login");
-                      }}
-                      style={{
-                        backgroundColor: "#9ca3af",
-                        color: "#fff",
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        border: "none",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Login to Enroll
-                    </button>
-                  )}
-                </div>
-              </div>
+                title={c.title}
+                instructor={c.instructor}
+                description={c.description}
+                primaryAction={
+                  <button onClick={() => enroll(c.id)} style={styles.orangeButton}>
+                    Enroll
+                  </button>
+                }
+              />
             ))}
-          </div>
+          </CourseGrid>
         )}
-      </section>
+      </Section>
 
-      {/* 🟢 Upcoming */}
-      <section>
-        <h2 style={{ fontSize: "1.8rem", marginBottom: 15 }}>
-          Upcoming Courses
-        </h2>
+      <Section title="Upcoming Courses">
         {upcoming.length === 0 ? (
-          <p style={{ color: "#6b7280" }}>No upcoming courses.</p>
+          <EmptyState text="No upcoming courses." />
         ) : (
-          <ul
-            style={{ listStyle: "none", padding: 0, display: "grid", gap: 12 }}
-          >
+          <ul style={{ listStyle: "none", padding: 0, display: "grid", gap: 12 }}>
             {upcoming.map((u) => (
               <li
                 key={u.id}
                 style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  backgroundColor: "#fff",
-                  boxShadow: "0 1px 6px rgba(0,0,0,0.1)",
+                  padding: 14,
+                  borderRadius: 14,
+                  background: "linear-gradient(145deg, #ffffff 0%, #f8fafc 100%)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  boxShadow: "0 4px 14px rgba(0,0,0,0.05)",
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  border: "1px solid rgba(255,255,255,0.5)",
                 }}
               >
-                <span>
-                  {u.title} (starts{" "}
+                <span style={{ fontSize: 15, color: "#1e3a8a", fontWeight: 600 }}>
+                  <strong>{u.title}</strong> (starts{" "}
                   {new Date(u.start_date).toLocaleDateString()})
                 </span>
                 <button
                   disabled
                   style={{
-                    backgroundColor: "#9ca3af",
+                    backgroundColor: "#94a3b8",
                     color: "#fff",
                     padding: "6px 12px",
-                    borderRadius: 6,
+                    borderRadius: 8,
                     border: "none",
-                    opacity: 0.6,
+                    opacity: 0.7,
                     cursor: "not-allowed",
                   }}
                 >
@@ -332,7 +197,158 @@ export default function Dashboard() {
             ))}
           </ul>
         )}
-      </section>
+      </Section>
     </div>
   );
 }
+
+/* ✅ Section Headings */
+function Section({ title, children }) {
+  return (
+    <section style={{ marginBottom: 50 }}>
+      <h2
+        style={{
+          fontSize: "1.8rem",
+          marginBottom: 20,
+          color: "#1e40af",
+          fontWeight: "700",
+          textShadow: "0 1px 3px rgba(30,64,175,0.1)",
+        }}
+      >
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/* ✅ Grid */
+function CourseGrid({ children }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
+        gap: 20,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* 🪄 Course Cards */
+function CourseCard({ title, instructor, description, primaryAction, secondaryAction }) {
+  return (
+    <div
+      style={{
+        padding: 20,
+        borderRadius: 16,
+        background: "linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        boxShadow: "0 6px 20px rgba(0,0,0,0.08)",
+        border: "1px solid rgba(255, 255, 255, 0.4)",
+        transition: "transform 0.25s ease, box-shadow 0.25s ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-8px) scale(1.02)";
+        e.currentTarget.style.boxShadow = "0 8px 24px rgba(30,64,175,0.15)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0) scale(1)";
+        e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.08)";
+      }}
+    >
+      <h3
+        style={{
+          fontSize: "1.35rem",
+          fontWeight: "700",
+          color: "#1e3a8a", // Rich blue for course titles
+          marginBottom: 8,
+        }}
+      >
+        {title}
+      </h3>
+      <p style={{ fontSize: 13, fontWeight: 500, color: "#475569" }}>
+        {instructor}
+      </p>
+      <p
+        style={{
+          marginTop: 8,
+          fontSize: 14,
+          color: "#334155",
+          lineHeight: 1.5,
+        }}
+      >
+        {description?.slice(0, 120)}...
+      </p>
+      <div
+        style={{
+          marginTop: 14,
+          display: "flex",
+          gap: 10,
+          justifyContent: secondaryAction ? "space-between" : "flex-start",
+        }}
+      >
+        {primaryAction}
+        {secondaryAction}
+      </div>
+    </div>
+  );
+}
+
+/* 🌿 Empty State */
+function EmptyState({ text }) {
+  return (
+    <p
+      style={{
+        color: "#64748b",
+        fontStyle: "italic",
+        fontSize: 15,
+        textAlign: "center",
+      }}
+    >
+      {text}
+    </p>
+  );
+}
+
+/* ✨ Buttons */
+const styles = {
+  orangeButton: {
+    background: "linear-gradient(90deg, #f97316, #ea580c)",
+    color: "#fff",
+    padding: "8px 14px",
+    borderRadius: 8,
+    border: "none",
+    fontWeight: "600",
+    cursor: "pointer",
+    boxShadow: "0 2px 6px rgba(234, 88, 12, 0.4)",
+    transition: "all 0.2s",
+  },
+  greenButton: {
+    background: "linear-gradient(90deg, #10b981, #059669)",
+    color: "#fff",
+    padding: "8px 14px",
+    borderRadius: 8,
+    border: "none",
+    fontWeight: "600",
+    textDecoration: "none",
+    textAlign: "center",
+    display: "inline-block",
+    boxShadow: "0 2px 6px rgba(5, 150, 105, 0.4)",
+    transition: "all 0.2s",
+  },
+  redButton: {
+    background: "linear-gradient(90deg, #dc2626, #991b1b)",
+    color: "#fff",
+    padding: "8px 14px",
+    borderRadius: 8,
+    border: "none",
+    fontWeight: "600",
+    cursor: "pointer",
+    boxShadow: "0 2px 6px rgba(185, 28, 28, 0.4)",
+    transition: "all 0.2s",
+  },
+};

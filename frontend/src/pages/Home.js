@@ -18,7 +18,7 @@ export default function Home() {
                 textAlign: 'center',
                 borderRadius: '0 0 20px 20px',
             }}>
-                <h1 style={{ fontSize: '3rem', marginBottom: 20 }}>Welcome to EduTrack AI</h1>
+                <h1 style={{ fontSize: '3rem', marginBottom: 20 }}>Welcome to EduTrack </h1>
                 <p style={{ fontSize: '1.2rem', maxWidth: 600, margin: '0 auto' }}>
                     Learn new skills, track your progress, and access courses online. Only registered users can access lessons and videos.
                 </p>
